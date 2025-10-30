@@ -184,14 +184,15 @@ def initialize_session_state():
             'Deliverable': ['Project Management Plan', 'Process Flow Diagrams', 'P&IDs - General Arrangement', 
                            'Equipment List', 'Piping Layout Drawings', 'Structural Design Drawings',
                            'Electrical Single Line Diagrams', 'I&C Architecture', 'Final Report'],
-            'Function': ['MANAGEMENT', 'ENGINEERING', 'ENGINEERING', 'ENGINEERING', 'DRAFTING', 
-                        'DRAFTING', 'ENGINEERING', 'ENGINEERING', 'MANAGEMENT'],
-            'Discipline': ['GN', 'ME', 'ME', 'ME', 'GN', 'ST', 'EE', 'IC', 'GN'],
+            'function': ['MANAGEMENT', 'ENGINEERING', 'ENGINEERING', 'ENGINEERING', 'DRAFTING', 
+                        'DRAFTING', 'ENGINEERING', 'ENGINEERING', 'MANAGEMENT'],  # lowercase
+            'discipline': ['GN', 'ME', 'ME', 'ME', 'GN', 'ST', 'EE', 'IC', 'GN'],  # lowercase
             'budget_hours': [20, 40, 60, 30, 80, 60, 40, 50, 20],
             'completion': [100, 80, 50, 60, 40, 20, 30, 10, 0],
             'status': ['Complete', 'In Progress', 'In Progress', 'In Progress', 'In Progress', 
                       'Started', 'Started', 'Started', 'Not Started']
         })
+
 
         
         st.session_state.timesheets = pd.DataFrame()
@@ -414,9 +415,9 @@ def page_deliverables():
         use_container_width=True,
         column_config={
             "Deliverable": st.column_config.TextColumn("Deliverable Name", width="large", required=True),
-            "Function": st.column_config.SelectboxColumn("Function", 
+            "function": st.column_config.SelectboxColumn("Function",  # Display name
                 options=["MANAGEMENT", "ENGINEERING", "DRAFTING"], required=True),
-            "Discipline": st.column_config.TextColumn("Discipline", width="small"),
+            "discipline": st.column_config.TextColumn("Discipline", width="small"),
             "budget_hours": st.column_config.NumberColumn("Budget Hours", format="%.1f", min_value=0, required=True),
             "completion": st.column_config.NumberColumn("% Complete", format="%.0f", min_value=0, max_value=100, required=True),
             "status": st.column_config.SelectboxColumn("Status",
