@@ -192,6 +192,7 @@ def initialize_session_state():
             'status': ['Complete', 'In Progress', 'In Progress', 'In Progress', 'In Progress', 
                       'Started', 'Started', 'Started', 'Not Started']
         })
+
         
         st.session_state.timesheets = pd.DataFrame()
         st.session_state.weekly_forecasts = {}
