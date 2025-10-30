@@ -1,14 +1,14 @@
 """
-EPCM Project Scorecard - Version 1.2
-Complete project management system with:
-- Project Setup page for parameters and configuration
-- Deliverables List with earned value tracking
-- S-Curves for visual progress monitoring
-- Weekly manning grid
-- Comprehensive reporting
+EPCM Project Scorecard - Version 1.3
+Fixed version with:
+- All column name consistency issues resolved
+- CSV Import/Export for all data tables
+- Enhanced report with S-curves and commentary
+- TypeError fixes for plotly
+- Proper weekly spend tracking
 
 Author: Built with AI assistance
-Version: 1.2 - Full Feature Release
+Version: 1.3 - Bug Fix & Enhancement Release
 """
 
 import streamlit as st
@@ -16,6 +16,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import io
+import base64
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -80,18 +81,18 @@ def lookup_rate_by_position(position: str, rates_df: pd.DataFrame) -> float:
     """Lookup billing rate by position from rate schedule."""
     if rates_df is None or rates_df.empty or pd.isna(position):
         return 170.0
-    match = rates_df[rates_df['Position'] == position]
+    match = rates_df[rates_df['position'] == position]
     if not match.empty:
-        return float(match.iloc[0]['Rate'])
+        return float(match.iloc[0]['rate'])
     return 170.0
 
 def get_staff_rate(staff_name: str, staff_df: pd.DataFrame, rates_df: pd.DataFrame) -> float:
     """Get billing rate for staff member."""
     if staff_df is None or staff_df.empty:
         return 170.0
-    match = staff_df[staff_df['Name'] == staff_name]
+    match = staff_df[staff_df['name'] == staff_name]
     if not match.empty:
-        position = match.iloc[0]['Position']
+        position = match.iloc[0]['position']
         return lookup_rate_by_position(position, rates_df)
     return 170.0
 
@@ -124,20 +125,26 @@ def calculate_earned_value(deliverables_df: pd.DataFrame) -> dict:
     
     deliverables_df['earned_hours'] = deliverables_df['budget_hours'] * deliverables_df['completion'] / 100.0
     
-    # Calculate earned cost (earned hours × average rate for that function)
     earned_hours = deliverables_df['earned_hours'].sum()
     
     # Estimate earned cost based on function average rates
     total_earned_cost = 0
     for func in ['MANAGEMENT', 'ENGINEERING', 'DRAFTING']:
+        # FIXED: Use lowercase 'function' consistently
         func_deliverables = deliverables_df[deliverables_df['function'] == func]
         if not func_deliverables.empty:
             func_earned_hours = func_deliverables['earned_hours'].sum()
-            # Use standard rates
             func_rate = {'MANAGEMENT': 245, 'ENGINEERING': 180, 'DRAFTING': 170}.get(func, 180)
             total_earned_cost += func_earned_hours * func_rate
     
     return {'earned_hours': earned_hours, 'earned_cost': total_earned_cost}
+
+def create_download_link(df: pd.DataFrame, filename: str) -> str:
+    """Create a download link for a dataframe as CSV."""
+    csv = df.to_csv(index=False)
+    b64 = base64.b64encode(csv.encode()).decode()
+    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">Download {filename}</a>'
+    return href
 
 # ============================================================================
 # DATA INITIALIZATION
@@ -164,36 +171,42 @@ def initialize_session_state():
             'contingency_pct': 10.0
         }
         
-        # Staff Database
+        # Commentary sections
+        st.session_state.commentary = {
+            'key_activities': '',
+            'next_period': '',
+            'issues_risks': '',
+            'general_notes': ''
+        }
+        
+        # Staff Database - CONSISTENT LOWERCASE COLUMNS
         st.session_state.staff = pd.DataFrame({
-            'Name': ['Gavin Andersen', 'Mark Rankin', 'Ben Robinson', 'Will Smith', 'Ben Bowles'],
-            'Function': ['MANAGEMENT', 'DRAFTING', 'ENGINEERING', 'ENGINEERING', 'ENGINEERING'],
-            'Discipline': ['GN', 'GN', 'ME', 'ME', 'ME'],
-            'Position': ['Engineering Manager', 'Drawing Office Manager', 'Senior Engineer', 'Lead Engineer', 'Senior Engineer']
+            'name': ['Gavin Andersen', 'Mark Rankin', 'Ben Robinson', 'Will Smith', 'Ben Bowles'],
+            'function': ['MANAGEMENT', 'DRAFTING', 'ENGINEERING', 'ENGINEERING', 'ENGINEERING'],
+            'discipline': ['GN', 'GN', 'ME', 'ME', 'ME'],
+            'position': ['Engineering Manager', 'Drawing Office Manager', 'Senior Engineer', 'Lead Engineer', 'Senior Engineer']
         })
         
-        # Rate Schedule
+        # Rate Schedule - CONSISTENT LOWERCASE COLUMNS
         st.session_state.rates = pd.DataFrame({
-            'Position': ['Engineering Manager', 'Lead Engineer', 'Senior Engineer', 'Drawing Office Manager', 
+            'position': ['Engineering Manager', 'Lead Engineer', 'Senior Engineer', 'Drawing Office Manager', 
                         'Lead Designer', 'Senior Designer', 'Designer', 'Principal Engineer', 'Technical Reviewer'],
-            'Rate': [245, 195, 170, 195, 165, 150, 140, 210, 245]
+            'rate': [245, 195, 170, 195, 165, 150, 140, 210, 245]
         })
         
-        # Deliverables List
+        # Deliverables List - CONSISTENT LOWERCASE COLUMNS
         st.session_state.deliverables = pd.DataFrame({
-            'Deliverable': ['Project Management Plan', 'Process Flow Diagrams', 'P&IDs - General Arrangement', 
+            'deliverable': ['Project Management Plan', 'Process Flow Diagrams', 'P&IDs - General Arrangement', 
                            'Equipment List', 'Piping Layout Drawings', 'Structural Design Drawings',
                            'Electrical Single Line Diagrams', 'I&C Architecture', 'Final Report'],
             'function': ['MANAGEMENT', 'ENGINEERING', 'ENGINEERING', 'ENGINEERING', 'DRAFTING', 
-                        'DRAFTING', 'ENGINEERING', 'ENGINEERING', 'MANAGEMENT'],  # lowercase
-            'discipline': ['GN', 'ME', 'ME', 'ME', 'GN', 'ST', 'EE', 'IC', 'GN'],  # lowercase
+                        'DRAFTING', 'ENGINEERING', 'ENGINEERING', 'MANAGEMENT'],
+            'discipline': ['GN', 'ME', 'ME', 'ME', 'GN', 'ST', 'EE', 'IC', 'GN'],
             'budget_hours': [20, 40, 60, 30, 80, 60, 40, 50, 20],
             'completion': [100, 80, 50, 60, 40, 20, 30, 10, 0],
             'status': ['Complete', 'In Progress', 'In Progress', 'In Progress', 'In Progress', 
                       'Started', 'Started', 'Started', 'Not Started']
         })
-
-
         
         st.session_state.timesheets = pd.DataFrame()
         st.session_state.weekly_forecasts = {}
@@ -377,10 +390,174 @@ def page_project_setup():
     
     if st.button("💾 Save Project Setup", type="primary"):
         st.success("✅ Project setup saved successfully!")
-        st.balloons()
 
 # ============================================================================
-# PAGE: DELIVERABLES LIST
+# PAGE: DATA MANAGEMENT (NEW - CSV IMPORT/EXPORT)
+# ============================================================================
+
+def page_data_management():
+    """Data management page for CSV import/export."""
+    st.title("💾 Data Management")
+    st.markdown("Import and export data tables as CSV files for bulk updates.")
+    
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Staff Database", "💰 Rate Schedule", "📋 Deliverables", "📅 Forecasts"])
+    
+    # TAB 1: STAFF
+    with tab1:
+        st.subheader("Staff Database")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📥 Import Staff CSV")
+            uploaded_staff = st.file_uploader("Upload Staff CSV", type=['csv'], key='upload_staff')
+            
+            if uploaded_staff:
+                try:
+                    df_staff = pd.read_csv(uploaded_staff)
+                    st.dataframe(df_staff)
+                    
+                    if st.button("✅ Import Staff Data"):
+                        st.session_state.staff = df_staff
+                        st.success("Staff data imported!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        
+        with col2:
+            st.markdown("### 📤 Export Staff CSV")
+            st.dataframe(st.session_state.staff)
+            
+            csv_staff = st.session_state.staff.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Staff CSV",
+                data=csv_staff,
+                file_name=f"staff_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
+    
+    # TAB 2: RATES
+    with tab2:
+        st.subheader("Rate Schedule")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📥 Import Rates CSV")
+            uploaded_rates = st.file_uploader("Upload Rates CSV", type=['csv'], key='upload_rates')
+            
+            if uploaded_rates:
+                try:
+                    df_rates = pd.read_csv(uploaded_rates)
+                    st.dataframe(df_rates)
+                    
+                    if st.button("✅ Import Rates Data"):
+                        st.session_state.rates = df_rates
+                        st.success("Rates data imported!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        
+        with col2:
+            st.markdown("### 📤 Export Rates CSV")
+            st.dataframe(st.session_state.rates)
+            
+            csv_rates = st.session_state.rates.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Rates CSV",
+                data=csv_rates,
+                file_name=f"rates_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
+    
+    # TAB 3: DELIVERABLES
+    with tab3:
+        st.subheader("Deliverables List")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📥 Import Deliverables CSV")
+            uploaded_deliv = st.file_uploader("Upload Deliverables CSV", type=['csv'], key='upload_deliv')
+            
+            if uploaded_deliv:
+                try:
+                    df_deliv = pd.read_csv(uploaded_deliv)
+                    st.dataframe(df_deliv)
+                    
+                    if st.button("✅ Import Deliverables Data"):
+                        st.session_state.deliverables = df_deliv
+                        st.success("Deliverables data imported!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        
+        with col2:
+            st.markdown("### 📤 Export Deliverables CSV")
+            st.dataframe(st.session_state.deliverables)
+            
+            csv_deliv = st.session_state.deliverables.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Deliverables CSV",
+                data=csv_deliv,
+                file_name=f"deliverables_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv"
+            )
+    
+    # TAB 4: FORECASTS
+    with tab4:
+        st.subheader("Weekly Forecasts")
+        
+        # Convert forecasts dict to dataframe
+        if st.session_state.weekly_forecasts:
+            forecast_data = []
+            for (person, week_str), hours in st.session_state.weekly_forecasts.items():
+                forecast_data.append({'person': person, 'week_ending': week_str, 'forecast_hours': hours})
+            df_forecasts = pd.DataFrame(forecast_data)
+        else:
+            df_forecasts = pd.DataFrame(columns=['person', 'week_ending', 'forecast_hours'])
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📥 Import Forecasts CSV")
+            st.info("CSV should have columns: person, week_ending, forecast_hours")
+            uploaded_forecast = st.file_uploader("Upload Forecasts CSV", type=['csv'], key='upload_forecast')
+            
+            if uploaded_forecast:
+                try:
+                    df_forecast_upload = pd.read_csv(uploaded_forecast)
+                    st.dataframe(df_forecast_upload)
+                    
+                    if st.button("✅ Import Forecast Data"):
+                        # Convert back to dict
+                        new_forecasts = {}
+                        for _, row in df_forecast_upload.iterrows():
+                            key = (row['person'], row['week_ending'])
+                            new_forecasts[key] = row['forecast_hours']
+                        st.session_state.weekly_forecasts = new_forecasts
+                        st.success("Forecast data imported!")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
+        
+        with col2:
+            st.markdown("### 📤 Export Forecasts CSV")
+            st.dataframe(df_forecasts)
+            
+            if not df_forecasts.empty:
+                csv_forecast = df_forecasts.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download Forecasts CSV",
+                    data=csv_forecast,
+                    file_name=f"forecasts_{datetime.now().strftime('%Y%m%d')}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("No forecast data to export yet.")
+
+# ============================================================================
+# PAGE: DELIVERABLES (FIXED)
 # ============================================================================
 
 def page_deliverables():
@@ -414,8 +591,8 @@ def page_deliverables():
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Deliverable": st.column_config.TextColumn("Deliverable Name", width="large", required=True),
-            "function": st.column_config.SelectboxColumn("Function",  # Display name
+            "deliverable": st.column_config.TextColumn("Deliverable Name", width="large", required=True),
+            "function": st.column_config.SelectboxColumn("Function", 
                 options=["MANAGEMENT", "ENGINEERING", "DRAFTING"], required=True),
             "discipline": st.column_config.TextColumn("Discipline", width="small"),
             "budget_hours": st.column_config.NumberColumn("Budget Hours", format="%.1f", min_value=0, required=True),
@@ -434,8 +611,8 @@ def page_deliverables():
     st.divider()
     st.subheader("Deliverables by Function")
     
-    # Group by function
-    by_function = edited_deliverables.groupby('Function').agg({
+    # Group by function - FIXED: Use lowercase 'function'
+    by_function = edited_deliverables.groupby('function').agg({
         'budget_hours': 'sum',
         'completion': 'mean'
     }).reset_index()
@@ -443,7 +620,7 @@ def page_deliverables():
     col1, col2, col3 = st.columns(3)
     
     for i, (col, func) in enumerate(zip([col1, col2, col3], ['MANAGEMENT', 'ENGINEERING', 'DRAFTING'])):
-        func_data = by_function[by_function['Function'] == func]
+        func_data = by_function[by_function['function'] == func]
         if not func_data.empty:
             with col:
                 st.markdown(f"**{func}**")
@@ -456,11 +633,11 @@ def page_deliverables():
     fig = go.Figure()
     
     for func in ['MANAGEMENT', 'ENGINEERING', 'DRAFTING']:
-        func_deliv = edited_deliverables[edited_deliverables['Function'] == func]
+        func_deliv = edited_deliverables[edited_deliverables['function'] == func]
         if not func_deliv.empty:
             fig.add_trace(go.Bar(
                 name=func,
-                x=func_deliv['Deliverable'],
+                x=func_deliv['deliverable'],
                 y=func_deliv['completion'],
                 text=func_deliv['completion'].apply(lambda x: f"{x:.0f}%"),
                 textposition='outside'
@@ -478,7 +655,7 @@ def page_deliverables():
     st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================================
-# PAGE: S-CURVES
+# PAGE: S-CURVES (FIXED)
 # ============================================================================
 
 def page_s_curves():
@@ -533,7 +710,6 @@ def page_s_curves():
         # Earned value (from deliverables completion)
         ev_data = calculate_earned_value(st.session_state.deliverables)
         if week <= report_date:
-            # Scale earned value proportionally to actual progress
             actual_to_date = df['hours'].sum()
             if total_budget > 0:
                 progress_pct = min(actual_to_date / total_budget, 1.0)
@@ -548,17 +724,18 @@ def page_s_curves():
         if week <= report_date:
             forecast = actual
         else:
-            # Add forecasted hours from manning grid
             forecast_hours = sum([hrs for (person, week_str), hrs in st.session_state.weekly_forecasts.items() 
                                 if pd.to_datetime(week_str) <= week])
             forecast = df['hours'].sum() + forecast_hours
-        forecast_curve.append(min(forecast, total_budget * 1.2))  # Cap at 120% of budget
+        forecast_curve.append(min(forecast, total_budget * 1.2))
     
-    # Create S-curve chart
+    # Create S-curve chart - FIXED: Convert datetime to string for plotly
     fig = go.Figure()
     
+    week_labels = [w.strftime('%Y-%m-%d') for w in weeks]
+    
     fig.add_trace(go.Scatter(
-        x=[w.strftime('%Y-%m-%d') for w in weeks],
+        x=week_labels,
         y=budget_curve,
         mode='lines',
         name='Budget (Planned)',
@@ -566,7 +743,7 @@ def page_s_curves():
     ))
     
     fig.add_trace(go.Scatter(
-        x=[w.strftime('%Y-%m-%d') for w in weeks],
+        x=week_labels,
         y=actual_curve,
         mode='lines+markers',
         name='Actual',
@@ -575,7 +752,7 @@ def page_s_curves():
     ))
     
     fig.add_trace(go.Scatter(
-        x=[w.strftime('%Y-%m-%d') for w in weeks],
+        x=week_labels,
         y=earned_curve,
         mode='lines+markers',
         name='Earned Value',
@@ -584,14 +761,14 @@ def page_s_curves():
     ))
     
     fig.add_trace(go.Scatter(
-        x=[w.strftime('%Y-%m-%d') for w in weeks],
+        x=week_labels,
         y=forecast_curve,
         mode='lines',
         name='Forecast',
         line=dict(color='orange', width=2, dash='dot')
     ))
     
-    # Add report date line
+    # Add report date line - FIXED: Use string format consistently
     fig.add_vline(
         x=report_date.strftime('%Y-%m-%d'),
         line_dash="solid",
@@ -619,7 +796,15 @@ def page_s_curves():
     
     current_actual = df['hours'].sum()
     current_earned = ev_data['earned_hours']
-    current_budget = budget_curve[weeks.index(report_date)] if report_date in weeks else total_budget
+    
+    # Find budget at report date
+    report_week_idx = None
+    for i, week in enumerate(weeks):
+        if week >= report_date:
+            report_week_idx = i
+            break
+    
+    current_budget = budget_curve[report_week_idx] if report_week_idx is not None else total_budget
     
     schedule_variance = current_earned - current_budget
     cost_variance = current_earned - current_actual
@@ -684,10 +869,7 @@ def page_dashboard():
         budget_draft = st.session_state.project_setup['budget_drafting']
         total_budget = budget_mgmt + budget_eng + budget_draft
         
-        # Earned value
         ev_data = calculate_earned_value(st.session_state.deliverables)
-        
-        # Performance factor
         pf = calculate_performance_factor(total_budget, total_actual_hours)
         
         st.subheader("Key Metrics")
@@ -823,8 +1005,8 @@ def page_master_data():
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Position": st.column_config.TextColumn("Position Title", required=True),
-            "Rate": st.column_config.NumberColumn("Hourly Rate ($/hr)", format="$%.0f", required=True)
+            "position": st.column_config.TextColumn("Position Title", required=True),
+            "rate": st.column_config.NumberColumn("Hourly Rate ($/hr)", format="$%.0f", required=True)
         }
     )
     
@@ -837,23 +1019,23 @@ def page_master_data():
     st.subheader("👤 Staff Database")
     
     staff_display = st.session_state.staff.copy()
-    staff_display['Current Rate'] = staff_display['Position'].apply(lambda x: lookup_rate_by_position(x, st.session_state.rates))
+    staff_display['current_rate'] = staff_display['position'].apply(lambda x: lookup_rate_by_position(x, st.session_state.rates))
     
     staff_df = st.data_editor(
         staff_display,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
-            "Name": st.column_config.TextColumn("Name", required=True),
-            "Function": st.column_config.SelectboxColumn("Function", options=["MANAGEMENT", "ENGINEERING", "DRAFTING"], required=True),
-            "Discipline": st.column_config.TextColumn("Discipline"),
-            "Position": st.column_config.SelectboxColumn("Position", options=st.session_state.rates['Position'].tolist(), required=True),
-            "Current Rate": st.column_config.NumberColumn("Rate ($/hr)", format="$%.0f", disabled=True)
+            "name": st.column_config.TextColumn("Name", required=True),
+            "function": st.column_config.SelectboxColumn("Function", options=["MANAGEMENT", "ENGINEERING", "DRAFTING"], required=True),
+            "discipline": st.column_config.TextColumn("Discipline"),
+            "position": st.column_config.SelectboxColumn("Position", options=st.session_state.rates['position'].tolist(), required=True),
+            "current_rate": st.column_config.NumberColumn("Rate ($/hr)", format="$%.0f", disabled=True)
         }
     )
     
     if st.button("💾 Save Staff", key="save_staff"):
-        staff_to_save = staff_df[['Name', 'Function', 'Discipline', 'Position']].copy()
+        staff_to_save = staff_df[['name', 'function', 'discipline', 'position']].copy()
         st.session_state.staff = staff_to_save
         st.success("✅ Staff database updated!")
         st.rerun()
@@ -888,10 +1070,10 @@ def page_manning():
     for person in all_staff:
         row = {'Personnel': person}
         
-        person_info = st.session_state.staff[st.session_state.staff['Name'] == person]
+        person_info = st.session_state.staff[st.session_state.staff['name'] == person]
         if not person_info.empty:
-            row['Position'] = person_info.iloc[0]['Position']
-            row['Function'] = person_info.iloc[0]['Function']
+            row['Position'] = person_info.iloc[0]['position']
+            row['Function'] = person_info.iloc[0]['function']
             row['Rate'] = get_staff_rate(person, st.session_state.staff, st.session_state.rates)
         else:
             row['Position'] = 'Unknown'
@@ -975,11 +1157,11 @@ def page_manning():
                     st.session_state.weekly_forecasts[forecast_key] = row[week_key] if not pd.isna(row[week_key]) else 0.0
 
 # ============================================================================
-# PAGE: REPORT
+# PAGE: REPORT (ENHANCED)
 # ============================================================================
 
 def page_report():
-    """Report generator."""
+    """Enhanced report generator with S-curve and commentary."""
     st.title("📈 Project Report")
     
     if st.session_state.timesheets.empty:
@@ -988,16 +1170,18 @@ def page_report():
     
     df = st.session_state.timesheets
     
+    # Report Header
     st.markdown(f"""
     ### Weekly Progress Report
     **Client:** {st.session_state.project_setup['client']}  
     **Project:** {st.session_state.project_setup['project_name']}  
-    **Date:** {st.session_state.project_setup['report_date']}  
+    **Report Date:** {st.session_state.project_setup['report_date']}  
     **Report By:** {st.session_state.project_setup['report_by']}
     """)
     
     st.divider()
     
+    # Performance Summary
     by_function = df.groupby('function').agg({'hours': 'sum', 'cost': 'sum'}).reset_index()
     
     mgmt_actual = by_function[by_function['function'] == 'MANAGEMENT']['hours'].sum() if 'MANAGEMENT' in by_function['function'].values else 0
@@ -1027,20 +1211,166 @@ def page_report():
         completion = (ev_data['earned_hours'] / total_budget * 100) if total_budget > 0 else 0
         st.metric("% Complete", f"{completion:.1f}%")
     
+    # Weekly Spend Table
     st.divider()
+    st.subheader("Weekly Spend Summary")
+    
+    weekly_spend = df.groupby('week_ending').agg({'hours': 'sum', 'cost': 'sum'}).reset_index()
+    weekly_spend['week_ending'] = weekly_spend['week_ending'].dt.strftime('%Y-%m-%d')
+    weekly_spend = weekly_spend.sort_values('week_ending')
+    weekly_spend.columns = ['Week Ending', 'Hours', 'Cost']
+    
+    st.dataframe(
+        weekly_spend,
+        use_container_width=True,
+        column_config={
+            "Week Ending": st.column_config.TextColumn("Week Ending"),
+            "Hours": st.column_config.NumberColumn("Hours", format="%.1f"),
+            "Cost": st.column_config.NumberColumn("Cost", format="$%,.0f")
+        },
+        hide_index=True
+    )
+    
+    # S-Curve in Report
+    st.divider()
+    st.subheader("Progress S-Curve")
+    
+    # Generate S-curve (simplified version)
+    start_date = pd.to_datetime(st.session_state.project_setup['start_date'])
+    end_date = pd.to_datetime(st.session_state.project_setup['end_date'])
+    report_date = pd.to_datetime(st.session_state.project_setup['report_date'])
+    
+    weeks = get_week_list(start_date, end_date, num_future_weeks=4)
+    week_labels = [w.strftime('%m/%d') for w in weeks]
+    
+    # Simplified curves for report
+    total_weeks = len([w for w in weeks if w <= end_date])
+    budget_curve = []
+    actual_curve = []
+    
+    for i, week in enumerate(weeks):
+        if week <= end_date:
+            week_num = len([w for w in weeks[:i+1] if w <= end_date])
+            budget_cum = (week_num / total_weeks) * total_budget if total_weeks > 0 else 0
+        else:
+            budget_cum = total_budget
+        budget_curve.append(budget_cum)
+        
+        if week <= report_date:
+            actual = df[df['week_ending'] <= week]['hours'].sum()
+        else:
+            actual = df['hours'].sum()
+        actual_curve.append(actual)
+    
+    fig_report = go.Figure()
+    
+    fig_report.add_trace(go.Scatter(
+        x=week_labels,
+        y=budget_curve,
+        mode='lines',
+        name='Budget',
+        line=dict(color='blue', width=2, dash='dash')
+    ))
+    
+    fig_report.add_trace(go.Scatter(
+        x=week_labels,
+        y=actual_curve,
+        mode='lines+markers',
+        name='Actual',
+        line=dict(color='red', width=2),
+        marker=dict(size=4)
+    ))
+    
+    fig_report.update_layout(
+        title="Cumulative Hours Progress",
+        xaxis_title="Week",
+        yaxis_title="Hours",
+        height=350,
+        showlegend=True,
+        legend=dict(orientation="h", y=1.1)
+    )
+    
+    st.plotly_chart(fig_report, use_container_width=True)
+    
+    # Commentary Sections
+    st.divider()
+    st.subheader("Project Commentary")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.session_state.commentary['key_activities'] = st.text_area(
+            "Key Activities This Period",
+            value=st.session_state.commentary['key_activities'],
+            height=150,
+            placeholder="Summarize major work completed this period..."
+        )
+        
+        st.session_state.commentary['issues_risks'] = st.text_area(
+            "Issues & Risks",
+            value=st.session_state.commentary['issues_risks'],
+            height=150,
+            placeholder="Note any issues, risks, or concerns..."
+        )
+    
+    with col2:
+        st.session_state.commentary['next_period'] = st.text_area(
+            "Planned Activities Next Period",
+            value=st.session_state.commentary['next_period'],
+            height=150,
+            placeholder="Outline planned work for next period..."
+        )
+        
+        st.session_state.commentary['general_notes'] = st.text_area(
+            "General Notes",
+            value=st.session_state.commentary['general_notes'],
+            height=150,
+            placeholder="Any additional notes or comments..."
+        )
+    
+    # Export
+    st.divider()
+    st.subheader("Export Report")
     
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Summary sheet
         summary_data = pd.DataFrame({
-            'Metric': ['Budget', 'Actual', 'Earned', 'Performance Factor'],
-            'Value': [total_budget, total_actual, ev_data['earned_hours'], pf]
+            'Metric': ['Client', 'Project', 'Report Date', 'Budget', 'Actual', 'Earned', 'Performance Factor', '% Complete'],
+            'Value': [
+                st.session_state.project_setup['client'],
+                st.session_state.project_setup['project_name'],
+                st.session_state.project_setup['report_date'],
+                total_budget,
+                total_actual,
+                ev_data['earned_hours'],
+                pf,
+                completion
+            ]
         })
         summary_data.to_excel(writer, sheet_name='Summary', index=False)
+        
+        # Weekly spend
+        weekly_spend.to_excel(writer, sheet_name='Weekly Spend', index=False)
+        
+        # Commentary
+        commentary_data = pd.DataFrame({
+            'Section': ['Key Activities', 'Next Period', 'Issues & Risks', 'General Notes'],
+            'Content': [
+                st.session_state.commentary['key_activities'],
+                st.session_state.commentary['next_period'],
+                st.session_state.commentary['issues_risks'],
+                st.session_state.commentary['general_notes']
+            ]
+        })
+        commentary_data.to_excel(writer, sheet_name='Commentary', index=False)
+        
+        # Data sheets
         df.to_excel(writer, sheet_name='Timesheets', index=False)
         st.session_state.deliverables.to_excel(writer, sheet_name='Deliverables', index=False)
     
     st.download_button(
-        label="📥 Download Excel Report",
+        label="📥 Download Complete Report (Excel)",
         data=output.getvalue(),
         file_name=f"Project_Report_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1060,7 +1390,7 @@ def main():
     
     page = st.sidebar.radio(
         "Navigation",
-        ["⚙️ Project Setup", "🏠 Dashboard", "📤 Data Import", "👥 Master Data", 
+        ["⚙️ Project Setup", "🏠 Dashboard", "📤 Data Import", "💾 Data Management", "👥 Master Data", 
          "📋 Deliverables", "📅 Manning View", "📈 S-Curves", "📊 Report"],
         label_visibility="collapsed"
     )
@@ -1079,8 +1409,8 @@ def main():
         st.rerun()
     
     st.sidebar.markdown("---")
-    st.sidebar.markdown("*EPCM Scorecard v1.2*")
-    st.sidebar.markdown("✨ *Full Feature Release*")
+    st.sidebar.markdown("*EPCM Scorecard v1.3*")
+    st.sidebar.markdown("✨ *Bug Fixes & Enhancements*")
     
     if page == "⚙️ Project Setup":
         page_project_setup()
@@ -1088,6 +1418,8 @@ def main():
         page_dashboard()
     elif page == "📤 Data Import":
         page_data_import()
+    elif page == "💾 Data Management":
+        page_data_management()
     elif page == "👥 Master Data":
         page_master_data()
     elif page == "📋 Deliverables":
